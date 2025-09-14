@@ -43,3 +43,6 @@ Add a path repo if using from source:
 Route::middleware(\Mariojgt\MasterKey\Http\Middleware\AuthToken::class)
      ->get('/api/me', fn() => auth()->user());
 ```
+
+## Client app
+You can download here [MasterKey app](https://github.com/mariojgt/masterkey-app).
