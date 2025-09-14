@@ -16,80 +16,12 @@
 <body>
   <div class="card">
     <h2>Scan to log in</h2>
-    <div id="qr"></div>
+  <div id="qr">{!! $qrSvg !!}</div>
     <p class="muted">Open the MasterKey app and scan this code.</p>
     <p id="status" class="muted">Waiting for approval...</p>
   </div>
-  <!-- Try multiple CDN sources for QR code library -->
-  <script src="https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js" onerror="loadQRCodeFallback()"></script>
   <script>
-    const payload = @json($payload);
     const statusUrl = @json($statusUrl);
-    let qrCodeLoaded = false;
-
-    // Function to load fallback CDN
-    function loadQRCodeFallback() {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
-      script.onload = function() {
-        generateQRWithFallback();
-      };
-      script.onerror = function() {
-        generateQRWithAPI();
-      };
-      document.head.appendChild(script);
-    }
-
-    // Generate QR with fallback library (different API)
-    function generateQRWithFallback() {
-      try {
-        const qr = qrcode(0, 'M');
-        qr.addData(payload);
-        qr.make();
-        document.getElementById('qr').innerHTML = qr.createImgTag(4);
-        const img = document.querySelector('#qr img');
-        if (img) {
-          img.style.width = '256px';
-          img.style.height = '256px';
-        }
-      } catch (e) {
-        generateQRWithAPI();
-      }
-    }
-
-    // Generate QR using external API as last resort
-    function generateQRWithAPI() {
-      const qrDiv = document.getElementById('qr');
-      const img = document.createElement('img');
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(payload)}`;
-      img.width = 256;
-      img.height = 256;
-      img.style.border = '1px solid #ddd';
-      img.alt = 'QR Code';
-      qrDiv.innerHTML = '';
-      qrDiv.appendChild(img);
-    }
-
-    // Main QR generation function
-    function generateQR() {
-      try {
-        if (typeof QRCode !== 'undefined') {
-          QRCode.toCanvas(document.getElementById('qr'), payload, { width: 256 });
-          qrCodeLoaded = true;
-        } else {
-          throw new Error('QRCode library not loaded');
-        }
-      } catch (e) {
-        generateQRWithAPI();
-      }
-    }
-
-    // Wait for DOM and try to generate QR
-    document.addEventListener('DOMContentLoaded', function() {
-      // Small delay to ensure script loading
-      setTimeout(generateQR, 100);
-    });
-
     async function poll() {
       try {
         const res = await fetch(statusUrl);
@@ -101,7 +33,7 @@
           return;
         }
       } catch (e) {}
-      setTimeout(poll, 1200);
+  setTimeout(poll, 2000);
     }
     poll();
   </script>

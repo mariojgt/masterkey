@@ -17,6 +17,11 @@ class MasterKeyServiceProvider extends ServiceProvider
             __DIR__.'/../config/masterkey.php' => config_path('masterkey.php'),
         ], 'config');
 
+        // Publish example handler stub
+        $this->publishes([
+            __DIR__.'/../resources/stubs/MasterKeyHandler.php' => app_path('Helpers/MasterKeyHandler.php'),
+        ], 'masterkey-stubs');
+
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'masterkey');
 

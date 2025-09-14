@@ -9,6 +9,9 @@ use Mariojgt\MasterKey\Mail\VerificationCodeMail;
 use Mariojgt\MasterKey\Models\MasterKeyVerification;
 use Mariojgt\MasterKey\Models\MasterKeyToken;
 use Mariojgt\MasterKey\Support\StrUtil;
+use Mariojgt\MasterKey\Support\MasterKeyHook;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Illuminate\Contracts\Support\Responsable;
 
 class AppAuthController extends Controller
 {
@@ -17,6 +20,15 @@ class AppAuthController extends Controller
         $request->validate(['email' => 'required|email']);
         $email = $request->input('email');
 
+        // Hook: allow custom pre-processing/validation. Can return Response to short-circuit.
+        $hookResult = MasterKeyHook::trigger('before_request_code', [
+            'request' => $request,
+            'email' => $email,
+        ]);
+        if ($hookResult instanceof SymfonyResponse || $hookResult instanceof Responsable) {
+            return $hookResult;
+        }
+
         $nonce = StrUtil::random(40);
         $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
@@ -24,6 +36,12 @@ class AppAuthController extends Controller
             'email' => $email,
             'nonce' => $nonce,
             'code' => $code,
+        ]);
+
+        // Optional post-create hook
+        MasterKeyHook::trigger('after_request_code', [
+            'request' => $request,
+            'email' => $email,
         ]);
 
         // Send the verification code via email (Mailtrap configured in .env)
@@ -49,6 +67,16 @@ class AppAuthController extends Controller
             'nonce' => 'required|string',
             'code' => 'required|string|size:6',
         ]);
+
+        // Hook before verify lookup
+        $pre = MasterKeyHook::trigger('before_verify', [
+            'request' => $request,
+            'nonce' => $data['nonce'],
+            'code' => $data['code'],
+        ]);
+        if ($pre instanceof SymfonyResponse || $pre instanceof Responsable) {
+            return $pre;
+        }
 
         $rec = MasterKeyVerification::where('nonce', $data['nonce'])->first();
         if (!$rec || $rec->used || $rec->code !== $data['code']) {
@@ -76,12 +104,25 @@ class AppAuthController extends Controller
         $rec->used = true;
         $rec->save();
 
-        return response()->json([
+        $response = response()->json([
             'token' => $token,
             'user' => [
                 'id' => $user->id,
                 'email' => $user->email,
             ],
         ])->header('Content-Type', 'application/json');
+
+        // Hook after verify success; allow response override
+        $post = MasterKeyHook::trigger('after_verify', [
+            'request' => $request,
+            'user' => $user,
+            'token' => $token,
+            'response' => $response,
+        ]);
+        if ($post instanceof SymfonyResponse || $post instanceof Responsable) {
+            return $post;
+        }
+
+        return $response;
     }
 }
