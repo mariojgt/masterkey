@@ -1,0 +1,21 @@
+{
+  "name": "mariojgt/masterkey",
+  "description": "MasterKey - Minimal QR-based auth for Laravel + Ionic (no Sanctum).",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "Mariojgt\\MasterKey\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Mariojgt\\MasterKey\\MasterKeyServiceProvider"
+      ]
+    }
+  },
+  "require": {
+    "php": "^8.3"
+  }
+}
