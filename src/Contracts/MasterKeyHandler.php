@@ -2,6 +2,8 @@
 
 namespace Mariojgt\MasterKey\Contracts;
 
+use Mariojgt\MasterKey\Enums\MasterKeyHookType;
+
 interface MasterKeyHandler
 {
     /**
@@ -17,5 +19,5 @@ interface MasterKeyHandler
     /**
      * $context is a typed DTO depending on $hook.
      */
-    public function handleMasterKey(string $hook, object $context = null);
+    public function handleMasterKey(MasterKeyHookType $hook, object $context = null);
 }

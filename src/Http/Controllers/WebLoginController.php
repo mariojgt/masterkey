@@ -7,6 +7,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Mariojgt\MasterKey\Models\MasterKeySession;
 use Mariojgt\MasterKey\Support\MasterKeyHook;
+use Mariojgt\MasterKey\Enums\MasterKeyHookType;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Illuminate\Contracts\Support\Responsable;
 
@@ -22,7 +23,7 @@ class WebLoginController extends Controller
 
         if ($rec->status === 'approved' && $rec->user_id) {
             // Optional hook before logging in; can short-circuit
-            $pre = MasterKeyHook::trigger('before_web_login', [
+            $pre = MasterKeyHook::trigger(MasterKeyHookType::BEFORE_WEB_LOGIN, [
                 'request' => $request,
                 'session' => $rec,
             ]);
@@ -37,7 +38,7 @@ class WebLoginController extends Controller
             $redirect = config('masterkey.post_login_redirect');
 
             // Optional post-login hook; can override redirect or return a Response
-            $post = MasterKeyHook::trigger('after_web_login', [
+            $post = MasterKeyHook::trigger(MasterKeyHookType::AFTER_WEB_LOGIN, [
                 'request' => $request,
                 'session' => $rec,
                 'user_id' => $rec->user_id,
@@ -60,7 +61,7 @@ class WebLoginController extends Controller
     public function approve(Request $request)
     {
         $data = $request->validate(['session_id' => 'required|string']);
-        $pre = MasterKeyHook::trigger('before_approve', [
+        $pre = MasterKeyHook::trigger(MasterKeyHookType::BEFORE_APPROVE, [
             'request' => $request,
             'session_id' => $data['session_id'],
         ]);
@@ -78,7 +79,7 @@ class WebLoginController extends Controller
         $rec->save();
 
         $response = response()->json(['ok' => true]);
-        $post = MasterKeyHook::trigger('after_approve', [
+        $post = MasterKeyHook::trigger(MasterKeyHookType::AFTER_APPROVE, [
             'request' => $request,
             'session' => $rec,
             'response' => $response,

@@ -10,6 +10,7 @@ use Mariojgt\MasterKey\Models\MasterKeyVerification;
 use Mariojgt\MasterKey\Models\MasterKeyToken;
 use Mariojgt\MasterKey\Support\StrUtil;
 use Mariojgt\MasterKey\Support\MasterKeyHook;
+use Mariojgt\MasterKey\Enums\MasterKeyHookType;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Illuminate\Contracts\Support\Responsable;
 
@@ -21,7 +22,7 @@ class AppAuthController extends Controller
         $email = $request->input('email');
 
         // Hook: allow custom pre-processing/validation. Can return Response to short-circuit.
-        $hookResult = MasterKeyHook::trigger('before_request_code', [
+        $hookResult = MasterKeyHook::trigger(MasterKeyHookType::BEFORE_REQUEST_CODE, [
             'request' => $request,
             'email' => $email,
         ]);
@@ -39,7 +40,7 @@ class AppAuthController extends Controller
         ]);
 
         // Optional post-create hook
-        MasterKeyHook::trigger('after_request_code', [
+        MasterKeyHook::trigger(MasterKeyHookType::AFTER_REQUEST_CODE, [
             'request' => $request,
             'email' => $email,
         ]);
@@ -69,7 +70,7 @@ class AppAuthController extends Controller
         ]);
 
         // Hook before verify lookup
-        $pre = MasterKeyHook::trigger('before_verify', [
+        $pre = MasterKeyHook::trigger(MasterKeyHookType::BEFORE_VERIFY, [
             'request' => $request,
             'nonce' => $data['nonce'],
             'code' => $data['code'],
@@ -83,12 +84,33 @@ class AppAuthController extends Controller
             return response()->json(['message' => 'Invalid code'], 422);
         }
 
-        // Demo user bootstrap: replace with your own logic.
-        $userModel = app(\App\Models\User::class);
-        $user = $userModel::firstOrCreate(['email' => $rec->email], [
-            'name' => explode('@', $rec->email)[0],
-            'password' => bcrypt(StrUtil::random(16)),
+        // Hook after verify success but before user creation - allow user creation override
+        $userCreationResult = MasterKeyHook::trigger(MasterKeyHookType::AFTER_VERIFY, [
+            'request' => $request,
+            'email' => $rec->email,
+            'nonce' => $data['nonce'],
+            'verification' => $rec,
         ]);
+
+        // If hook returns a user, use it; otherwise create a default one
+        if ($userCreationResult && is_object($userCreationResult) && isset($userCreationResult->id)) {
+            $user = $userCreationResult;
+        } else {
+            // Safety check: prevent auto user creation in production unless explicitly enabled
+            if (app()->environment('production') && !config('masterkey.allow_auto_user_creation', false)) {
+                return response()->json([
+                    'message' => 'User creation not configured. ' .
+                                'Please implement user creation in your MasterKeyHandler.'
+                ], 422);
+            }
+            
+            // Fallback user creation - you should implement this in your MasterKeyHandler
+            $userModel = app(\App\Models\User::class);
+            $user = $userModel::firstOrCreate(['email' => $rec->email], [
+                'name' => explode('@', $rec->email)[0],
+                'password' => bcrypt(StrUtil::random(16)),
+            ]);
+        }
 
         $token = StrUtil::random(60);
         $expiresDays = config('masterkey.token_expires_days');
@@ -113,7 +135,7 @@ class AppAuthController extends Controller
         ])->header('Content-Type', 'application/json');
 
         // Hook after verify success; allow response override
-        $post = MasterKeyHook::trigger('after_verify', [
+        $post = MasterKeyHook::trigger(MasterKeyHookType::AFTER_VERIFY, [
             'request' => $request,
             'user' => $user,
             'token' => $token,
