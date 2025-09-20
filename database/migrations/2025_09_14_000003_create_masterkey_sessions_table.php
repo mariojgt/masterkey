@@ -11,7 +11,7 @@ return new class extends Migration {
             $table->id();
             $table->string('session_id', 64)->unique();
             $table->enum('status', ['pending','approved','used'])->default('pending');
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $table->bigInteger('user_id')->nullable()->unsigned()->index();
             $table->timestamps();
         });
     }

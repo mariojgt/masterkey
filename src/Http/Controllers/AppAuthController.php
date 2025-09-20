@@ -92,25 +92,19 @@ class AppAuthController extends Controller
             'verification' => $rec,
         ]);
 
-        // If hook returns a user, use it; otherwise create a default one
-        if ($userCreationResult && is_object($userCreationResult) && isset($userCreationResult->id)) {
-            $user = $userCreationResult;
-        } else {
-            // Safety check: prevent auto user creation in production unless explicitly enabled
-            if (app()->environment('production') && !config('masterkey.allow_auto_user_creation', false)) {
-                return response()->json([
-                    'message' => 'User creation not configured. ' .
-                                'Please implement user creation in your MasterKeyHandler.'
-                ], 422);
-            }
-            
-            // Fallback user creation - you should implement this in your MasterKeyHandler
-            $userModel = app(\App\Models\User::class);
-            $user = $userModel::firstOrCreate(['email' => $rec->email], [
-                'name' => explode('@', $rec->email)[0],
-                'password' => bcrypt(StrUtil::random(16)),
-            ]);
+        // Check if the hook returned a Response (error case)
+        if ($userCreationResult instanceof SymfonyResponse || $userCreationResult instanceof Responsable) {
+            return $userCreationResult;
         }
+
+        // Check if we got a valid user/admin object
+        if (!$userCreationResult || !is_object($userCreationResult) || !isset($userCreationResult->id)) {
+            return response()->json([
+                'message' => 'Authentication failed. Unable to verify account.'
+            ], 422);
+        }
+
+        $user = $userCreationResult;
 
         $token = StrUtil::random(60);
         $expiresDays = config('masterkey.token_expires_days');

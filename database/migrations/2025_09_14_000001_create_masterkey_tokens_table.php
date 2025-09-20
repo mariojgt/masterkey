@@ -9,7 +9,7 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('masterkey_tokens', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->bigInteger('user_id')->unsigned()->index();
             $table->string('token', 80)->unique();
             $table->string('name')->nullable();
             $table->timestamp('last_used_at')->nullable();
