@@ -47,12 +47,19 @@ class MasterKeyHandler implements MasterKeyHandlerContract
                 // In production, automatic user creation is disabled unless explicitly enabled
                 // in config/masterkey.php with 'allow_auto_user_creation' => true
 
-                // If the context has an email, create or find the user
+                // If the context has an email, create or find the user/model
                 if (isset($context->email)) {
+                    // Option 1: Create/find a User
                     $user = $this->createOrFindUser($context->email);
 
-                    // Return the user object so the controller can use it
-                    return $user;
+                    // Option 2: Create/find an Admin (example of different model)
+                    // $admin = $this->createOrFindAdmin($context->email);
+
+                    // Option 3: Create/find any model based on email domain or other logic
+                    // $model = $this->createOrFindModelBasedOnEmail($context->email);
+
+                    // Return the model object so the controller can use it
+                    return $user; // or $admin, or $model
                 }
 
                 // You can also modify the response to include additional user data
@@ -123,6 +130,40 @@ class MasterKeyHandler implements MasterKeyHandlerContract
         //     'role' => 'user',
         //     'status' => 'active',
         // ]);
+    }
+
+    /**
+     * Create or find admin by email - example for different model
+     */
+    private function createOrFindAdmin(string $email)
+    {
+        // Example: Create/find admin from a different model
+        // $adminModel = app(\App\Models\Admin::class);
+        // return $adminModel::firstOrCreate(['email' => $email], [
+        //     'name' => $this->generateNameFromEmail($email),
+        //     'password' => bcrypt(\Illuminate\Support\Str::random(16)),
+        //     'role' => 'admin',
+        //     'status' => 'active',
+        // ]);
+
+        // For demonstration, fallback to User model
+        return $this->createOrFindUser($email);
+    }
+
+    /**
+     * Create or find model based on email or other logic
+     */
+    private function createOrFindModelBasedOnEmail(string $email)
+    {
+        // Example: Route to different models based on email domain
+        if (str_ends_with($email, '@admin.com')) {
+            return $this->createOrFindAdmin($email);
+        } elseif (str_ends_with($email, '@manager.com')) {
+            // return $this->createOrFindManager($email);
+        }
+
+        // Default to user
+        return $this->createOrFindUser($email);
     }
 
     /**

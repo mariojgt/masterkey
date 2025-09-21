@@ -21,7 +21,7 @@ class WebLoginController extends Controller
             return response()->json(['status' => 'missing']);
         }
 
-        if ($rec->status === 'approved' && $rec->user_id) {
+        if ($rec->status === 'approved' && $rec->tokenable_id) {
             // Optional hook before logging in; can short-circuit
             $pre = MasterKeyHook::trigger(MasterKeyHookType::BEFORE_WEB_LOGIN, [
                 'request' => $request,
@@ -31,7 +31,7 @@ class WebLoginController extends Controller
                 return $pre;
             }
 
-            Auth::loginUsingId($rec->user_id);
+            Auth::loginUsingId($rec->tokenable_id);
             $rec->status = 'used';
             $rec->save();
 
@@ -41,7 +41,7 @@ class WebLoginController extends Controller
             $post = MasterKeyHook::trigger(MasterKeyHookType::AFTER_WEB_LOGIN, [
                 'request' => $request,
                 'session' => $rec,
-                'user_id' => $rec->user_id,
+                'user_id' => $rec->tokenable_id,
                 'default_redirect' => $redirect,
             ]);
             if ($post instanceof SymfonyResponse || $post instanceof Responsable) {
@@ -75,7 +75,8 @@ class WebLoginController extends Controller
         }
 
         $rec->status = 'approved';
-        $rec->user_id = auth()->id();
+        $rec->tokenable_type = get_class(auth()->user());
+        $rec->tokenable_id = auth()->id();
         $rec->save();
 
         $response = response()->json(['ok' => true]);

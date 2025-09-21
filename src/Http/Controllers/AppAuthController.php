@@ -111,7 +111,8 @@ class AppAuthController extends Controller
         $expiresAt = is_null($expiresDays) ? null : now()->addDays((int)$expiresDays);
 
         MasterKeyToken::create([
-            'user_id' => $user->id,
+            'tokenable_type' => get_class($user),
+            'tokenable_id' => $user->id,
             'token' => $token,
             'name' => 'masterkey-app',
             'expires_at' => $expiresAt,

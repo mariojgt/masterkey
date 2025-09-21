@@ -19,11 +19,22 @@ class AuthToken
         $token = substr($header, 7);
 
         $record = MasterKeyToken::query()->where('token', $token)->first();
-        if (!$record || $record->isExpired() || !$record->user) {
+        if (!$record || $record->isExpired() || !$record->tokenable) {
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        Auth::login($record->user);
+        // Use the polymorphic relationship to get the authenticated model
+        $authenticatedModel = $record->tokenable;
+
+        // If it's a User model, use Auth::login, otherwise set in session/context
+        if ($authenticatedModel instanceof \Illuminate\Foundation\Auth\User) {
+            Auth::login($authenticatedModel);
+        } else {
+            // For non-User models, you might want to store in session or request
+            $request->attributes->set('authenticated_model', $authenticatedModel);
+            $request->attributes->set('authenticated_model_type', get_class($authenticatedModel));
+        }
+
         $record->last_used_at = now();
         $record->save();
 
