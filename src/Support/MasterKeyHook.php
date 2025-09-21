@@ -11,6 +11,7 @@ use Mariojgt\MasterKey\Dto\AfterWebLoginContext;
 use Mariojgt\MasterKey\Dto\BeforeApproveContext;
 use Mariojgt\MasterKey\Dto\BeforeRequestCodeContext;
 use Mariojgt\MasterKey\Dto\BeforeVerifyContext;
+use Mariojgt\MasterKey\Dto\CreateUserContext;
 use Mariojgt\MasterKey\Dto\BeforeWebLoginContext;
 use Mariojgt\MasterKey\Enums\MasterKeyHookType;
 
@@ -87,6 +88,12 @@ class MasterKeyHook
                 $context['request'],
                 $context['nonce'],
                 $context['code']
+            ),
+            MasterKeyHookType::CREATE_USER => new CreateUserContext(
+                $context['request'],
+                $context['email'],
+                $context['nonce'],
+                $context['verification']
             ),
             MasterKeyHookType::AFTER_VERIFY => new AfterVerifyContext(
                 $context['request'],

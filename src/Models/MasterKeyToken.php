@@ -23,10 +23,12 @@ class MasterKeyToken extends Model
      * Legacy method for backward compatibility
      * @deprecated Use tokenable() instead
      */
-    public function user(): BelongsTo
+    public function getUserAttribute()
     {
-        return $this->belongsTo(\App\Models\User::class, 'tokenable_id')
-            ->where('tokenable_type', \App\Models\User::class);
+        if ($this->tokenable_type === \App\Models\User::class) {
+            return $this->tokenable;
+        }
+        return null;
     }
 
     public function isExpired(): bool

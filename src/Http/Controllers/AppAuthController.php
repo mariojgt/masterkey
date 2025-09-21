@@ -85,7 +85,7 @@ class AppAuthController extends Controller
         }
 
         // Hook after verify success but before user creation - allow user creation override
-        $userCreationResult = MasterKeyHook::trigger(MasterKeyHookType::AFTER_VERIFY, [
+        $userCreationResult = MasterKeyHook::trigger(MasterKeyHookType::CREATE_USER, [
             'request' => $request,
             'email' => $rec->email,
             'nonce' => $data['nonce'],
