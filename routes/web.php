@@ -17,7 +17,7 @@ use Mariojgt\MasterKey\Http\Controllers\WebLoginController;
 Route::middleware('web')->group(function () {
 
     // QR Login Page - displays QR code for mobile app scanning
-    Route::get('/login-qr', [QrController::class, 'loginQrPage'])
+    Route::get(config('masterkey.routes.login-qr'), [QrController::class, 'loginQrPage'])
         ->name('masterkey.login-qr');
 
     // Status endpoint for polling login approval status
