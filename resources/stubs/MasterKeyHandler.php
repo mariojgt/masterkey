@@ -2,16 +2,16 @@
 
 namespace App\Helpers;
 
-use Mariojgt\MasterKey\Contracts\MasterKeyHandler as MasterKeyHandlerContract;
-use Mariojgt\MasterKey\Dto\AfterApproveContext;
-use Mariojgt\MasterKey\Dto\AfterRequestCodeContext;
 use Mariojgt\MasterKey\Dto\AfterVerifyContext;
+use Mariojgt\MasterKey\Dto\AfterApproveContext;
+use Mariojgt\MasterKey\Dto\BeforeVerifyContext;
+use Mariojgt\MasterKey\Enums\MasterKeyHookType;
 use Mariojgt\MasterKey\Dto\AfterWebLoginContext;
 use Mariojgt\MasterKey\Dto\BeforeApproveContext;
-use Mariojgt\MasterKey\Dto\BeforeRequestCodeContext;
-use Mariojgt\MasterKey\Dto\BeforeVerifyContext;
 use Mariojgt\MasterKey\Dto\BeforeWebLoginContext;
-use Mariojgt\MasterKey\Enums\MasterKeyHookType;
+use Mariojgt\MasterKey\Dto\AfterRequestCodeContext;
+use Mariojgt\MasterKey\Dto\BeforeRequestCodeContext;
+use Mariojgt\MasterKey\Contracts\MasterKeyHandler as MasterKeyHandlerContract;
 
 class MasterKeyHandler implements MasterKeyHandlerContract
 {
@@ -23,8 +23,9 @@ class MasterKeyHandler implements MasterKeyHandlerContract
         switch ($hook) {
             case MasterKeyHookType::BEFORE_REQUEST_CODE:
                 /** @var \Mariojgt\MasterKey\Dto\BeforeRequestCodeContext $context */
-                // Example: restrict to certain domains or rate limit
-                // if (!str_ends_with($context->email, '@example.com')) {
+                // check if the email exists on the Admin model
+                // $admin = Admin::where('email', $context->email)->first();
+                // if (!$admin) {
                 //     return response()->json(['message' => 'Email not allowed'], 403);
                 // }
                 break;
@@ -40,27 +41,18 @@ class MasterKeyHandler implements MasterKeyHandlerContract
                 // Example: captcha/anti-abuse gate
                 break;
 
-            case MasterKeyHookType::AFTER_VERIFY:
-                /** @var \Mariojgt\MasterKey\Dto\AfterVerifyContext $context */
-                // This hook is called after successful verification but BEFORE user creation
-                // IMPORTANT: You should implement user creation here to avoid fallback behavior
-                // In production, automatic user creation is disabled unless explicitly enabled
-                // in config/masterkey.php with 'allow_auto_user_creation' => true
-
+            case MasterKeyHookType::CREATE_USER:
                 // If the context has an email, create or find the user/model
-                if (isset($context->email)) {
-                    // Option 1: Create/find a User
-                    $user = $this->createOrFindUser($context->email);
+                // if (isset($context->email)) {
+                //     // Option 1: Find the user on the admin table
+                //     $user = Admin::where('email', $context->email)->first();
 
-                    // Option 2: Create/find an Admin (example of different model)
-                    // $admin = $this->createOrFindAdmin($context->email);
-
-                    // Option 3: Create/find any model based on email domain or other logic
-                    // $model = $this->createOrFindModelBasedOnEmail($context->email);
-
-                    // Return the model object so the controller can use it
-                    return $user; // or $admin, or $model
-                }
+                //     // Return the model object so the controller can use it
+                //     return $user; // or $admin, or $model
+                // }
+                break;
+            case MasterKeyHookType::AFTER_VERIFY:
+                // Implement the login logic here
 
                 // You can also modify the response to include additional user data
                 // return response()->json([
@@ -85,14 +77,19 @@ class MasterKeyHandler implements MasterKeyHandlerContract
 
             case MasterKeyHookType::AFTER_WEB_LOGIN:
                 /** @var \Mariojgt\MasterKey\Dto\AfterWebLoginContext $context */
-                // Example: override redirect
-                // return '/dashboard';
-                // or return ['redirect' => '/dashboard'];
+                // find the user/admin by id if needed
+                // $user = Admin::find($context->user_id);
+                // if ($user && $user->is_suspended) {
+                //     return response()->json(['status' => 'suspended'], 403);
+                // }
+
+                // Now login the user with the guard skeleton_admin
+                // backendGuard()->login($user);
+
                 break;
 
             case MasterKeyHookType::BEFORE_APPROVE:
                 /** @var \Mariojgt\MasterKey\Dto\BeforeApproveContext $context */
-                // Example: validate requester permissions
                 break;
 
             case MasterKeyHookType::AFTER_APPROVE:
@@ -148,40 +145,5 @@ class MasterKeyHandler implements MasterKeyHandlerContract
 
         // For demonstration, fallback to User model
         return $this->createOrFindUser($email);
-    }
-
-    /**
-     * Create or find model based on email or other logic
-     */
-    private function createOrFindModelBasedOnEmail(string $email)
-    {
-        // Example: Route to different models based on email domain
-        if (str_ends_with($email, '@admin.com')) {
-            return $this->createOrFindAdmin($email);
-        } elseif (str_ends_with($email, '@manager.com')) {
-            // return $this->createOrFindManager($email);
-        }
-
-        // Default to user
-        return $this->createOrFindUser($email);
-    }
-
-    /**
-     * Get email from verification record using nonce
-     */
-    private function getEmailFromVerification(\Illuminate\Http\Request $request, string $nonce): ?string
-    {
-        $verification = \Mariojgt\MasterKey\Models\MasterKeyVerification::where('nonce', $nonce)->first();
-        return $verification?->email;
-    }
-
-    /**
-     * Generate a user-friendly name from email
-     */
-    private function generateNameFromEmail(string $email): string
-    {
-        $name = explode('@', $email)[0];
-        // Convert dots and underscores to spaces and title case
-        return \Illuminate\Support\Str::title(str_replace(['.', '_', '-'], ' ', $name));
     }
 }
