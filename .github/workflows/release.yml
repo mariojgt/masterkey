@@ -1,0 +1,282 @@
+name: Auto Release and Tag
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  auto-release:
+    if: github.event_name == 'push' || (github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      previous_version: ${{ steps.version.outputs.previous_version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
+      tag_created: ${{ steps.create_tag.outputs.tag_created }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get latest tag and analyze commits
+      id: version
+      run: |
+        # Get the latest tag, if no tags exist, start with v0.0.0
+        latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "previous_version=$latest_tag" >> $GITHUB_OUTPUT
+        echo "📦 Current version: $latest_tag"
+
+        # Get commit messages since last tag
+        if [ "$latest_tag" = "v0.0.0" ]; then
+          # If no previous tags, get all commits
+          commit_messages=$(git log --pretty=format:"%s" HEAD)
+        else
+          # Get commits since last tag
+          commit_messages=$(git log --pretty=format:"%s" ${latest_tag}..HEAD)
+        fi
+
+        echo "📝 Commit messages since $latest_tag:"
+        echo "$commit_messages"
+
+        # Check if there are any new commits
+        if [ -z "$commit_messages" ]; then
+          echo "ℹ️ No new commits since last tag, skipping version bump"
+          echo "bump_type=none" >> $GITHUB_OUTPUT
+          echo "new_version=$latest_tag" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Determine bump type based on commit messages with priority order
+        bump_type="patch"  # default
+
+        # Check for major version keywords (highest priority)
+        if echo "$commit_messages" | grep -iE "(major|breaking|BREAKING CHANGE|!:|feat!:|fix!:)" > /dev/null; then
+          bump_type="major"
+          echo "🚨 Found major/breaking change indicators"
+        # Check for minor version keywords (medium priority)
+        elif echo "$commit_messages" | grep -iE "(minor|feat:|feature:|add:|new:)" > /dev/null; then
+          bump_type="minor"
+          echo "✨ Found minor/feature change indicators"
+        # Check for patch version keywords (low priority)
+        elif echo "$commit_messages" | grep -iE "(patch|fix:|bugfix:|hotfix:|docs:|style:|refactor:|test:|chore:)" > /dev/null; then
+          bump_type="patch"
+          echo "🐛 Found patch/fix change indicators"
+        else
+          # Default to patch if commits exist but no specific keywords found
+          bump_type="patch"
+          echo "📝 No specific keywords found, defaulting to patch bump"
+        fi
+
+        echo "bump_type=$bump_type" >> $GITHUB_OUTPUT
+        echo "📈 Determined bump type: $bump_type"
+
+        # Calculate new version
+        version=${latest_tag#v}  # Remove 'v' prefix if present
+        IFS='.' read -ra VERSION_PARTS <<< "$version"
+        major=${VERSION_PARTS[0]:-0}
+        minor=${VERSION_PARTS[1]:-0}
+        patch=${VERSION_PARTS[2]:-0}
+
+        # Bump version based on type
+        case $bump_type in
+          "major")
+            major=$((major + 1))
+            minor=0
+            patch=0
+            ;;
+          "minor")
+            minor=$((minor + 1))
+            patch=0
+            ;;
+          "patch")
+            patch=$((patch + 1))
+            ;;
+        esac
+
+        new_version="v$major.$minor.$patch"
+        echo "new_version=$new_version" >> $GITHUB_OUTPUT
+        echo "🏷️ New version: $new_version"
+
+    - name: Generate changelog
+      id: changelog
+      if: steps.version.outputs.bump_type != 'none'
+      run: |
+        latest_tag="${{ steps.version.outputs.previous_version }}"
+        new_version="${{ steps.version.outputs.new_version }}"
+
+        # Generate changelog from commits
+        if [ "$latest_tag" = "v0.0.0" ]; then
+          changelog=$(git log --pretty=format:"- %s (%h)" HEAD)
+        else
+          changelog=$(git log --pretty=format:"- %s (%h)" ${latest_tag}..HEAD)
+        fi
+
+        # Categorize commits
+        features=""
+        fixes=""
+        others=""
+        breaking=""
+
+        while IFS= read -r line; do
+          if echo "$line" | grep -iE "(major|breaking|BREAKING CHANGE|!:|feat!:|fix!:)" > /dev/null; then
+            breaking="$breaking$line"$'\n'
+          elif echo "$line" | grep -iE "(feat:|feature:|add:|new:)" > /dev/null; then
+            features="$features$line"$'\n'
+          elif echo "$line" | grep -iE "(fix:|bugfix:|hotfix:)" > /dev/null; then
+            fixes="$fixes$line"$'\n'
+          else
+            others="$others$line"$'\n'
+          fi
+        done <<< "$changelog"
+
+        # Build formatted changelog
+        formatted_changelog="## Changes in $new_version"$'\n\n'
+
+        if [ -n "$breaking" ]; then
+          formatted_changelog="$formatted_changelog### 🚨 Breaking Changes"$'\n'"$breaking"$'\n'
+        fi
+
+        if [ -n "$features" ]; then
+          formatted_changelog="$formatted_changelog### ✨ New Features"$'\n'"$features"$'\n'
+        fi
+
+        if [ -n "$fixes" ]; then
+          formatted_changelog="$formatted_changelog### 🐛 Bug Fixes"$'\n'"$fixes"$'\n'
+        fi
+
+        if [ -n "$others" ]; then
+          formatted_changelog="$formatted_changelog### 📝 Other Changes"$'\n'"$others"$'\n'
+        fi
+
+        formatted_changelog="$formatted_changelog"$'\n'"### Installation"$'\n'"'"'bash
+        composer require mariojgt/builder:$new_version
+        "'"'"
+
+        # Save to file and output
+        echo "$formatted_changelog" > CHANGELOG_TEMP.md
+        echo "changelog_file=CHANGELOG_TEMP.md" >> $GITHUB_OUTPUT
+
+    - name: Check if tag exists and create tag
+      id: create_tag
+      if: steps.version.outputs.bump_type != 'none'
+      run: |
+        new_version="${{ steps.version.outputs.new_version }}"
+        bump_type="${{ steps.version.outputs.bump_type }}"
+        latest_tag="${{ steps.version.outputs.previous_version }}"
+
+        # Check if tag exists locally
+        local_tag_exists=false
+        if git rev-parse "$new_version" >/dev/null 2>&1; then
+          local_tag_exists=true
+        fi
+
+        # Check if tag exists on remote
+        remote_tag_exists=false
+        if git ls-remote --tags origin | grep -q "refs/tags/$new_version$"; then
+          remote_tag_exists=true
+        fi
+
+        if [ "$local_tag_exists" = true ] || [ "$remote_tag_exists" = true ]; then
+          echo "tag_created=false" >> $GITHUB_OUTPUT
+          echo "⚠️ Tag $new_version already exists (local: $local_tag_exists, remote: $remote_tag_exists)"
+          echo "Skipping tag creation..."
+          exit 0
+        fi
+
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Create annotated tag with detailed message
+        tag_message="Auto-release $new_version
+
+        Version: $new_version
+        Bump type: $bump_type
+        Previous version: $latest_tag
+
+        This release was automatically generated based on commit analysis."
+
+        git tag -a "$new_version" -m "$tag_message"
+
+        # Push tag
+        git push origin "$new_version"
+
+        echo "tag_created=true" >> $GITHUB_OUTPUT
+        echo "✅ Created and pushed tag: $new_version"
+
+    - name: Create GitHub Release
+      if: steps.version.outputs.bump_type != 'none' && steps.create_tag.outputs.tag_created == 'true'
+      uses: actions/create-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.new_version }}
+        release_name: Release ${{ steps.version.outputs.new_version }}
+        body_path: ${{ steps.changelog.outputs.changelog_file }}
+        draft: false
+        prerelease: false
+
+    - name: Update composer.json version (if version field exists)
+      if: steps.version.outputs.bump_type != 'none' && steps.create_tag.outputs.tag_created == 'true'
+      run: |
+        new_version="${{ steps.version.outputs.new_version }}"
+        version_number=${new_version#v}  # Remove 'v' prefix
+
+        # Check if composer.json has a version field and update it
+        if [ -f "composer.json" ]; then
+          if grep -q '"version"' composer.json; then
+            # Create a backup
+            cp composer.json composer.json.bak
+
+            # Update version field
+            sed -i.bak 's/"version": "[^"]*"/"version": "'$version_number'"/g' composer.json
+            echo "📝 Updated version in composer.json to $version_number"
+
+            # Commit the change
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add composer.json
+            git commit -m "chore: bump version to $new_version [skip ci]"
+            git push origin main
+          else
+            echo "ℹ️ No version field in composer.json, skipping update"
+          fi
+        fi
+
+    - name: Summary - Success
+      if: steps.version.outputs.bump_type != 'none' && steps.create_tag.outputs.tag_created == 'true'
+      run: |
+        echo "🎉 Successfully created release ${{ steps.version.outputs.new_version }}"
+        echo "📈 Bump type: ${{ steps.version.outputs.bump_type }}"
+        echo "📦 Previous version: ${{ steps.version.outputs.previous_version }}"
+        echo "🏷️ New tag created and pushed"
+        echo "📋 GitHub release created"
+        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.new_version }}"
+
+    - name: Summary - No action needed
+      if: steps.version.outputs.bump_type == 'none'
+      run: |
+        echo "ℹ️ No new commits since last tag (${{ steps.version.outputs.previous_version }})"
+        echo "📝 No version bump needed"
+
+    - name: Summary - Tag already exists
+      if: steps.version.outputs.bump_type != 'none' && steps.create_tag.outputs.tag_created == 'false'
+      run: |
+        echo "⚠️ Tag ${{ steps.version.outputs.new_version }} already exists"
+        echo "🚫 Skipped tag creation and release"
+        echo "💡 If you need to create this release manually, delete the existing tag first"
